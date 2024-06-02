@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+
+    <style type="text/css">
+        #canvas-container {
+            width: 100%;
+            text-align: center;
+            display: inline-block;
+        }
+        #canvas {
+            border: 1px solid black;
+        }
+
+        #resultado {
+            display: inline-block;
+            width: 100%;
+            text-align: center;
+            font-size: 2rem;
+        }
+
+        #historial {
+            margin-top: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <div id="canvas-container">
+            <canvas id="canvas" width="28" height="28"></canvas>
+        </div>
+        <input type="file" id="file-input" accept="image/*">
+        <div id="resultado"></div>
+        <div id="historial">
+            <h2>Historial de predicciones</h2>
+            <ul id="lista-predicciones"></ul>
+        </div>
+    </div>
+
+    <script
+          src="https://code.jquery.com/jquery-3.4.1.min.js"
+          integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo="
+          crossorigin="anonymous"></script>
+
+    <script type="text/javascript">
+        //Tomar y configurar el canvas
+        var canvas = document.getElementById("canvas");
+        var ctx = canvas.getContext("2d");
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 1;
+
+        // Eventos de canvas para dibujar segun el estado del mouse
+        var mousedown = false;
+
+        canvas.onmousedown = function(e) {
+            var pos = fixPosition(e, canvas);
+            const context = canvas.getContext('2d');
+
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            mousedown = true;
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            return false;
+        };
+
+        canvas.onmousemove = function(e) {
+            var pos = fixPosition(e, canvas);
+            if (mousedown) {
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            }
+        };
+
+        canvas.onmouseup = function(e) {
+            mousedown = false;
+
+            // Arreglo para almacenar los pixeles
+            var pixels = [];
+            var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            var data = imageData.data;
+
+            for (var i = 0; i < data.length; i += 4) {
+                // Convertir el color a escala de grises
+                var color = data[i] / 255; // R
+                pixels.push(color);
+            }
+
+            // Enviar un post con ajax hacia el puerto 8000.
+            // Se envia 'pixeles', el cual es el arreglo convertido en cadena separada por comas.
+            // Al regresar el resultado, lo pone en el div con id 'resultado'
+            $.post("http://localhost:8000", {pixeles: pixels.join(",")},
+                function(response) {
+                    console.log("Resultado: " + response);
+                    $("#resultado").html(response);
+                    actualizarHistorial(response);
+                }
+            );
+        };
+
+        // Función para obtener la posición del mouse
+        function fixPosition(e, gCanvasElement) {
+            var x;
+            var y;
+            if (e.pageX || e.pageY) { 
+              x = e.pageX;
+              y = e.pageY;
+            }
+            else { 
+              x = e.clientX + document.body.scrollLeft + document.documentElement.scrollLeft;
+              y = e.clientY + document.body.scrollTop + document.documentElement.scrollTop;
+            } 
+            x -= gCanvasElement.offsetLeft;
+            y -= gCanvasElement.offsetTop;
+            return {x: x, y:y};
+        }
+
+        function actualizarHistorial(prediccion) {
+            var lista = document.getElementById("lista-predicciones");
+            var nuevoItem = document.createElement("li");
+            nuevoItem.textContent = prediccion;
+            lista.appendChild(nuevoItem);
+        }
+
+        // Manejar la carga de imágenes desde el input file
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            var reader = new FileReader();
+
+            reader.onload = function(e) {
+                var img = new Image();
+                img.onload = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    // Dibujar la imagen en un canvas temporal y luego escalarla al tamaño de 28x28
+                    var tempCanvas = document.createElement("canvas");
+                    var tempCtx = tempCanvas.getContext("2d");
+                    tempCanvas.width = 28;
+                    tempCanvas.height = 28;
+                    tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height);
+                    // Obtener los datos de píxeles de la imagen escalada
+                    var imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                    var data = imageData.data;
+                    var pixels = [];
+                    for (var i = 0; i < data.length; i += 4) {
+                        var color = data[i] / 255; // R
+                        pixels.push(color);
+                    }
+
+                    // Enviar un post con ajax hacia el puerto 8000.
+                    // Se envia 'pixeles', el cual es el arreglo convertido en cadena separada por comas.
+                    // Al regresar el resultado, lo pone en el div con id 'resultado'
+                    $.post("http://localhost:8000", {pixeles: pixels.join(",")},
+                        function(response) {
+                            console.log("Resultado: " + response);
+                            $("#resultado").html(response);
+                            actualizarHistorial(response);
+                        }
+                    );
+                };
+                img.src = e.target.result;
+            };
+
+            reader.readAsDataURL(file);
+        });
+
+    </script>
+</body>
+</html>
